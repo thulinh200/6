@@ -240,7 +240,7 @@ K.DEFAULTS = {
     --
     -- Set `false` to leave the machine-wide cap alone, or a higher number if you
     -- are running one client and would rather watch it.
-    AntiLagFPS          = 6,
+    AntiLagFPS          = 5,
 
     ---------------------------------------------------------------- mission
     StartType           = "Missions",
@@ -271,7 +271,7 @@ K.DEFAULTS = {
     -- whole questline, in exchange for runs that finish.
     -- Set to "safe"/"max"/"none", or a tag list, to override.
     SpearModifierProfile = "spear",
-    AutoBoostedMap      = true,
+    AutoBoostedMap      = false,
 
     ---------------------------------------------------------------- combat
     Aggression          = "Nitro",      -- "Safe" | "Balanced" | "Turbo" | "Nitro"
@@ -582,7 +582,7 @@ K.DEFAULTS = {
     -- lands or the spins run out, then goes back to farming for more gems.
     AutoFamilyRoll      = true,
     AutoBuySpins        = true,
-    FamilyAtPrestige    = 5,          -- nil = PrestigeTarget
+    FamilyAtPrestige    = nil,          -- nil = PrestigeTarget
     -- Spin packs (Storage.Shop.Spins), all paid in gems:
     --   1 = 5 / 500   2 = 25 / 2,500   3 = 100 / 10,000   4 = 250 / 23,000   5 = 500 / 45,000
     -- Pack 5 is the cheapest per spin (90 vs 100). If it is not affordable the
@@ -597,7 +597,7 @@ K.DEFAULTS = {
     FamilyWantRarity    = "Mythic",
     -- Put a wanted family into a free storage slot and keep rolling for more.
     -- Storage holds 1 + Extra_Slots.Family (+10 with the Family Bag gamepass).
-    FamilyStoreWanted   = true,
+    FamilyStoreWanted   = false,
     FamilyMaxRolls      = 0,            -- per lobby visit, 0 = until done or out of spins
     -- false = once the goal is met or the gems run out, stay in the lobby
     -- instead of farming more gems for the next round of spins.
@@ -738,10 +738,10 @@ K.DEFAULTS = {
     SkipRepeat          = 1.0,  -- seconds between skip presses while it is up
 
     ---------------------------------------------------------------- boosts
-    AutoBoost           = true,
+    AutoBoost           = false,
     SkipXpBoostWhenMaxed = true, -- do not buy XP boosts while the bar is capped
-    BoostTypes          = { "XP", "Gold" },
-    MinGemsToBuyBoosts  = 20000,
+    BoostTypes          = nil,
+    MinGemsToBuyBoosts  = 999999,
     BoostCheckInterval  = 15,
 
     ---------------------------------------------------------------- flow
@@ -827,8 +827,7 @@ K.DEFAULTS = {
     -- goes out to every user is a live secret handed to every user: anyone can
     -- read it out of the loader and post to that channel, and every client that
     -- did not set its own would report into it. Set it in your own config.
-    Webhook = true,
-	WebhookURL = "https://discord.com/api/webhooks/1331926354874204221/vxpGYZgmiaVxOv1mhzEWTH5BCeRkmPiRx3CJgwU2NklYOfQIhPJWL6TQtU8iPPl41ivo",
+    Webhook             = false,
     -- The name the message is posted UNDER, in Discord. The Roblox account's
     -- own username is a separate thing and always appears in the embed itself.
     WebhookUsername     = "VC+ AOTR",
@@ -848,15 +847,15 @@ K.DEFAULTS = {
     -- Also post when the account status flips to flagged, or when a run is
     -- abandoned for making no progress. These are the two things worth being
     -- told about while you are not watching.
-    WebhookAlerts       = false,
+    WebhookAlerts       = true,
     -- The end-of-mission report above. false = no mission posts at all (the
     -- roll posts and alerts still go out).
-    WebhookMissions     = false,
+    WebhookMissions     = true,
     -- Family roll posts (§35b): a card for every family rolled at this rarity
     -- or better, a highlighted one when a WANTED family lands, and one summary
     -- per roll session (rolls used, spins bought, gems spent, best family).
     WebhookRolls        = true,
-    WebhookRollRarity   = "Mythic",  -- Common < Rare < Epic < Legendary < Mythic < Secret
+    WebhookRollRarity   = "Legendary",  -- Common < Rare < Epic < Legendary < Mythic < Secret
 
     ------------------------------------------------------------ vc+ tracking
     -- Reports this account's stats to the Accounts page on vcplus.xyz (§41e):
