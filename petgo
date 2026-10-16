@@ -740,7 +740,7 @@ K.DEFAULTS = {
     ---------------------------------------------------------------- boosts
     AutoBoost           = true,
     SkipXpBoostWhenMaxed = true, -- do not buy XP boosts while the bar is capped
-    BoostTypes          = nil,
+    BoostTypes          = { "XP", "Gold" },
     MinGemsToBuyBoosts  = 20000,
     BoostCheckInterval  = 15,
 
