@@ -254,7 +254,7 @@ K.DEFAULTS = {
     ModifierProfile     = "safe",       -- "safe" (+52.5% XP/Gold, no downside
                                         -- for a hovering bot) | "max" (+97.5%,
                                         -- tougher titans) | "none"
-    Modifiers           = nil,          -- explicit tag list overrides the
+    Modifiers           = max,          -- explicit tag list overrides the
                                         -- profile; nil = use the profile
     -- PROFILE FOR THUNDER SPEAR RUNS ONLY.
     --
@@ -271,7 +271,7 @@ K.DEFAULTS = {
     -- whole questline, in exchange for runs that finish.
     -- Set to "safe"/"max"/"none", or a tag list, to override.
     SpearModifierProfile = "spear",
-    AutoBoostedMap      = false,
+    AutoBoostedMap      = true,
 
     ---------------------------------------------------------------- combat
     Aggression          = "Nitro",      -- "Safe" | "Balanced" | "Turbo" | "Nitro"
@@ -286,7 +286,7 @@ K.DEFAULTS = {
     -- When a run turns out to be spawn-limited (we kill faster than titans
     -- appear), reward per run is the only lever left — so escalate the
     -- modifier profile instead of hammering harder. Defaults on for Nitro.
-    AutoModifierEscalate= nil,
+    AutoModifierEscalate= true,
     -- VOLLEY FIRE (§21c). The server accepts about one Slash a second and each
     -- accepted Slash credits up to 9 hits on DIFFERENT titans. A volley is one
     -- Slash + VolleySize hits, timed to the accept window. Measured at 5fps:
@@ -537,7 +537,7 @@ K.DEFAULTS = {
     -- bought. Upgrades raise Potential, and Potential is the ONLY thing that
     -- unlocks a higher difficulty tier — so this is the setting that decides
     -- whether the account climbs or stays put. 0 disables the trip entirely.
-    LobbyEvery          = 20,
+    LobbyEvery          = 6,
     AutoDeletePerk      = true,
     PerkSellTarget      = nil,          -- nil = derived from difficulty rank
     SmartSkills         = true,         -- solve the unlock frontier, don't spam
@@ -582,7 +582,7 @@ K.DEFAULTS = {
     -- lands or the spins run out, then goes back to farming for more gems.
     AutoFamilyRoll      = true,
     AutoBuySpins        = true,
-    FamilyAtPrestige    = nil,          -- nil = PrestigeTarget
+    FamilyAtPrestige    = 5,          -- nil = PrestigeTarget
     -- Spin packs (Storage.Shop.Spins), all paid in gems:
     --   1 = 5 / 500   2 = 25 / 2,500   3 = 100 / 10,000   4 = 250 / 23,000   5 = 500 / 45,000
     -- Pack 5 is the cheapest per spin (90 vs 100). If it is not affordable the
@@ -738,10 +738,10 @@ K.DEFAULTS = {
     SkipRepeat          = 1.0,  -- seconds between skip presses while it is up
 
     ---------------------------------------------------------------- boosts
-    AutoBoost           = false,
+    AutoBoost           = true,
     SkipXpBoostWhenMaxed = true, -- do not buy XP boosts while the bar is capped
-    BoostTypes          = nil,
-    MinGemsToBuyBoosts  = 999999,
+    BoostTypes          = { "XP","GOLD" },
+    MinGemsToBuyBoosts  = 4599,
     BoostCheckInterval  = 15,
 
     ---------------------------------------------------------------- flow
@@ -870,7 +870,7 @@ K.DEFAULTS = {
     VCPlusEvery         = 60,           -- seconds between reports (20-600)
 
     ---------------------------------------------------------------- telemetry
-    ShowStats           = true,
+    ShowStats           = false,
     StatsInterval       = 60,
     Console             = false,        -- true opens the executor console window
     Debug               = false,
