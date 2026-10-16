@@ -216,7 +216,7 @@ K.DEFAULTS = {
     AutoFarm            = true,
     TargetSlot          = "A",
     AutoLift            = true,
-    Disable3D           = false,
+    Disable3D           = true,
     AutoAntiLag         = true,
     -- Park the audio listener out of range instead of mixing sound nobody is
     -- listening to. false leaves audio alone.
