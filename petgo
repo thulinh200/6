@@ -782,7 +782,7 @@ K.DEFAULTS = {
     -- boots HIDDEN, and while hidden its redraw loop early-outs every tick, so
     -- the frame-bound combat loop is untouched. Click the button (or press
     -- StatusUIKey) to bring it up. On a headless farm box set ShowUI = false.
-    ShowUI              = true,
+    ShowUI              = false,
     -- Cinematic boot wipe: an expanding logo + name + live boot status that
     -- confirms the script loaded, then clears itself. Runs in its own thread so
     -- the farm boots underneath it; pure one-shot tweens, no per-frame cost and
