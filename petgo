@@ -573,7 +573,7 @@ K.DEFAULTS = {
         P2 = { TargetBoost = "Gold Boost", RequiredGold = 50 },
         P3 = { TargetBoost = "Gold Boost", RequiredGold = 50 },
         P4 = { TargetBoost = "Gold Boost", RequiredGold = 50 },
-        P5 = { TargetBoost = "Gold Boost", RequiredGold = 100 },
+        P5 = { TargetBoost = "Gold Boost", RequiredGold = 150 },
     },
 
     ---------------------------------------------------------------- quests
