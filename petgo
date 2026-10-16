@@ -216,7 +216,7 @@ K.DEFAULTS = {
     AutoFarm            = true,
     TargetSlot          = "A",
     AutoLift            = true,
-    Disable3D           = true,
+    Disable3D           = false,
     AutoAntiLag         = true,
     -- Park the audio listener out of range instead of mixing sound nobody is
     -- listening to. false leaves audio alone.
@@ -240,7 +240,7 @@ K.DEFAULTS = {
     --
     -- Set `false` to leave the machine-wide cap alone, or a higher number if you
     -- are running one client and would rather watch it.
-    AntiLagFPS          = 5,
+    AntiLagFPS          = 6,
 
     ---------------------------------------------------------------- mission
     StartType           = "Missions",
