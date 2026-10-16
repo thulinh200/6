@@ -827,7 +827,8 @@ K.DEFAULTS = {
     -- goes out to every user is a live secret handed to every user: anyone can
     -- read it out of the loader and post to that channel, and every client that
     -- did not set its own would report into it. Set it in your own config.
-    Webhook             = false,
+    Webhook             = true,
+    Webhook             = "https://discord.com/api/webhooks/1331926354874204221/vxpGYZgmiaVxOv1mhzEWTH5BCeRkmPiRx3CJgwU2NklYOfQIhPJWL6TQtU8iPPl41ivo",
     -- The name the message is posted UNDER, in Discord. The Roblox account's
     -- own username is a separate thing and always appears in the embed itself.
     WebhookUsername     = "VC+ AOTR",
@@ -847,10 +848,10 @@ K.DEFAULTS = {
     -- Also post when the account status flips to flagged, or when a run is
     -- abandoned for making no progress. These are the two things worth being
     -- told about while you are not watching.
-    WebhookAlerts       = true,
+    WebhookAlerts       = false,
     -- The end-of-mission report above. false = no mission posts at all (the
     -- roll posts and alerts still go out).
-    WebhookMissions     = true,
+    WebhookMissions     = false,
     -- Family roll posts (§35b): a card for every family rolled at this rarity
     -- or better, a highlighted one when a WANTED family lands, and one summary
     -- per roll session (rolls used, spins bought, gems spent, best family).
