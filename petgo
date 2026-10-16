@@ -216,7 +216,7 @@ K.DEFAULTS = {
     AutoFarm            = true,
     TargetSlot          = "A",
     AutoLift            = true,
-    Disable3D           = false,
+    Disable3D           = true,
     AutoAntiLag         = true,
     -- Park the audio listener out of range instead of mixing sound nobody is
     -- listening to. false leaves audio alone.
@@ -569,11 +569,11 @@ K.DEFAULTS = {
     -- at the level cap permanently.
     PrestigeMaxTries    = 5,
     VCPlusPrestige      = {
-        P1 = { TargetBoost = "Gold Boost", RequiredGold = 0 },
-        P2 = { TargetBoost = "Gold Boost", RequiredGold = 0 },
-        P3 = { TargetBoost = "Gold Boost", RequiredGold = 0 },
-        P4 = { TargetBoost = "Gold Boost", RequiredGold = 0 },
-        P5 = { TargetBoost = "Gold Boost", RequiredGold = 0 },
+        P1 = { TargetBoost = "Gold Boost", RequiredGold = 50 },
+        P2 = { TargetBoost = "Gold Boost", RequiredGold = 50 },
+        P3 = { TargetBoost = "Gold Boost", RequiredGold = 50 },
+        P4 = { TargetBoost = "Gold Boost", RequiredGold = 50 },
+        P5 = { TargetBoost = "Gold Boost", RequiredGold = 100 },
     },
 
     ---------------------------------------------------------------- quests
