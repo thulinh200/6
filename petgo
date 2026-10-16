@@ -271,7 +271,7 @@ K.DEFAULTS = {
     -- whole questline, in exchange for runs that finish.
     -- Set to "safe"/"max"/"none", or a tag list, to override.
     SpearModifierProfile = "spear",
-    AutoBoostedMap      = false,
+    AutoBoostedMap      = true,
 
     ---------------------------------------------------------------- combat
     Aggression          = "Nitro",      -- "Safe" | "Balanced" | "Turbo" | "Nitro"
@@ -576,6 +576,38 @@ K.DEFAULTS = {
         P5 = { TargetBoost = "Gold Boost", RequiredGold = 100 },
     },
 
+    ---------------------------------------------------------------- after prestige: spins + family
+    -- Once the account reaches FamilyAtPrestige (nil = PrestigeTarget) every
+    -- lobby visit turns gems into spins and rolls the family until a wanted one
+    -- lands or the spins run out, then goes back to farming for more gems.
+    AutoFamilyRoll      = true,
+    AutoBuySpins        = true,
+    FamilyAtPrestige    = 5,          -- nil = PrestigeTarget
+    -- Spin packs (Storage.Shop.Spins), all paid in gems:
+    --   1 = 5 / 500   2 = 25 / 2,500   3 = 100 / 10,000   4 = 250 / 23,000   5 = 500 / 45,000
+    -- Pack 5 is the cheapest per spin (90 vs 100). If it is not affordable the
+    -- next smaller pack is tried.
+    SpinPack            = 5,
+    SpinBuyQty          = 1,            -- packs per purchase (buys again only when spins hit 0)
+    SpinGemReserve      = 0,            -- gems that must remain after a purchase
+    -- Stop rolling (and keep the family) on any of these names...
+    FamilyWant          = { "Shiki", "Fritz", "Helos", "Ackerman" },
+    -- ...or on any family of this rarity or rarer. nil = names only.
+    -- Common < Rare < Epic < Legendary < Mythic < Secret
+    FamilyWantRarity    = "Mythic",
+    -- Put a wanted family into a free storage slot and keep rolling for more.
+    -- Storage holds 1 + Extra_Slots.Family (+10 with the Family Bag gamepass).
+    FamilyStoreWanted   = true,
+    FamilyMaxRolls      = 0,            -- per lobby visit, 0 = until done or out of spins
+    -- false = once the goal is met or the gems run out, stay in the lobby
+    -- instead of farming more gems for the next round of spins.
+    FamilyKeepFarming   = true,
+    -- Call _G.Horst_AccountChangeDone() once a wanted family is equipped.
+    FamilyDoneHandoff   = false,
+    -- From the family phase on, do not spend gems on XP/Gold boosts (boosts
+    -- already in the inventory are still used). false = keep buying them.
+    FamilyStopGemBoosts = true,
+
     ---------------------------------------------------------------- quests
     AutoQuest           = true,
     SmartQuests         = true,         -- claim only what the save says exists
@@ -709,7 +741,7 @@ K.DEFAULTS = {
     AutoBoost           = true,
     SkipXpBoostWhenMaxed = true, -- do not buy XP boosts while the bar is capped
     BoostTypes          = nil,
-    MinGemsToBuyBoosts  = 4599,
+    MinGemsToBuyBoosts  = 20000,
     BoostCheckInterval  = 15,
 
     ---------------------------------------------------------------- flow
@@ -750,7 +782,7 @@ K.DEFAULTS = {
     -- boots HIDDEN, and while hidden its redraw loop early-outs every tick, so
     -- the frame-bound combat loop is untouched. Click the button (or press
     -- StatusUIKey) to bring it up. On a headless farm box set ShowUI = false.
-    ShowUI              = false,
+    ShowUI              = true,
     -- Cinematic boot wipe: an expanding logo + name + live boot status that
     -- confirms the script loaded, then clears itself. Runs in its own thread so
     -- the farm boots underneath it; pure one-shot tweens, no per-frame cost and
@@ -795,7 +827,8 @@ K.DEFAULTS = {
     -- goes out to every user is a live secret handed to every user: anyone can
     -- read it out of the loader and post to that channel, and every client that
     -- did not set its own would report into it. Set it in your own config.
-    Webhook             = false,
+    Webhook = true,
+	WebhookURL = "https://discord.com/api/webhooks/1331926354874204221/vxpGYZgmiaVxOv1mhzEWTH5BCeRkmPiRx3CJgwU2NklYOfQIhPJWL6TQtU8iPPl41ivo",
     -- The name the message is posted UNDER, in Discord. The Roblox account's
     -- own username is a separate thing and always appears in the embed itself.
     WebhookUsername     = "VC+ AOTR",
@@ -815,7 +848,15 @@ K.DEFAULTS = {
     -- Also post when the account status flips to flagged, or when a run is
     -- abandoned for making no progress. These are the two things worth being
     -- told about while you are not watching.
-    WebhookAlerts       = true,
+    WebhookAlerts       = false,
+    -- The end-of-mission report above. false = no mission posts at all (the
+    -- roll posts and alerts still go out).
+    WebhookMissions     = false,
+    -- Family roll posts (§35b): a card for every family rolled at this rarity
+    -- or better, a highlighted one when a WANTED family lands, and one summary
+    -- per roll session (rolls used, spins bought, gems spent, best family).
+    WebhookRolls        = true,
+    WebhookRollRarity   = "Mythic",  -- Common < Rare < Epic < Legendary < Mythic < Secret
 
     ------------------------------------------------------------ vc+ tracking
     -- Reports this account's stats to the Accounts page on vcplus.xyz (§41e):
@@ -2050,7 +2091,10 @@ local function refreshState(force)
     end
 
     -- Family, Spins: known paths first, deep scan only as a fallback.
-    local fam = slot.Family or (type(slot.Progression) == "table" and slot.Progression.Family)
+    -- Avatar.Family first: a blind deepFind can land on Extra_Slots.Family,
+    -- which is a slot COUNT, and report the family as "3".
+    local fam = (type(slot.Avatar) == "table" and slot.Avatar.Family)
+        or slot.Family or (type(slot.Progression) == "table" and slot.Progression.Family)
     if fam == nil then fam = deepFind(slot, "Family") end
     if type(fam) == "table" then fam = fam.Name or fam.Tag end
     if fam ~= nil and fam ~= "" then STATE.family = tostring(fam) end
@@ -2063,7 +2107,10 @@ local function refreshState(force)
     -- Data.Spins was 0. Reading Spins first is what pinned STATE.spins (and so
     -- _G.VCP.spins, the panel row and the Discord report) at 0 on every account.
     local save  = SAVE.data
+    -- "ROLL (n)" is Spins + Extra (Customisation.Rolling). Spins sat at 0 on
+    -- every account measured, but bought spins may land there.
     local spins = save and rawget(save, "Extra")
+    if spins ~= nil then spins = num(spins) + num(rawget(save, "Spins")) end
     if spins == nil then
         spins = slot.Spins
             or (type(slot.Currencies) == "table" and slot.Currencies.Spins)
@@ -8900,6 +8947,410 @@ local function doPrestige()
 end
 
 -- ═══════════════════════════════════════════════════════════════════════════
+-- 35b · SPINS + FAMILY ROLL  ·  the job once the prestige target is reached
+--
+--     Read out of the game's own UI code (2026-10-16), not guessed:
+--       buy    GET("S_Market","Buy","Spins", pack, qty)            [Buying.lua]
+--              Storage.Shop.Spins[pack] = { Currency="Gems", Amount, Cost },
+--              qty 1..99. Reply: nil = not enough gems, a string = the
+--              refusal text, a table = the new save.
+--       roll   GET("Family","Roll") -> spins, extra, family, pity, anim
+--              [Customisation.Rolling]. ~3.30s per-player cooldown; a roll
+--              inside it answers nil and costs nothing (measured 2026-08-27).
+--       store  GET("Family","Store") -> ok, storedName, newCurrentFamily
+--       count  Data.Spins + Data.Extra -- exactly what "ROLL (n)" shows.
+--       rarity Storage.Families[rarity][name]
+--     The game asks "are you sure?" before rerolling an Epic or better; here
+--     the same job is done by FamilyWant / FamilyWantRarity, checked before
+--     EVERY roll, so a wanted family is never rolled away.
+--
+--     WHERE. The roll button lives on the title screen, but the save reads and
+--     the market both answer in the lobby. The lobby is tried first; if it
+--     refuses rolls with spins in hand, the verdict is written to disk and the
+--     rolls move to the menu (one teleport), after buying in the lobby.
+-- ═══════════════════════════════════════════════════════════════════════════
+K.FAM = {
+    RANK = { common = 1, uncommon = 2, rare = 3, epic = 4, legendary = 5,
+             mythic = 6, exclusive = 7, secret = 8 },
+    rarity   = nil,     -- lower(name) -> rarity, from Storage.Families
+    lastRoll = 0,
+    cooldown = 3.30,
+    -- Disk, because the verdict has to cross the teleport to the menu.
+    WHERE_FILE = ("VCPlus_FamilyWhere_%s_%s.txt"):format(tostring(game.GameId), tostring(plr.UserId)),
+    MENU_FILE  = ("VCPlus_FamilyMenu_%s_%s.txt"):format(tostring(game.GameId), tostring(plr.UserId)),
+}
+
+-- InvokeServer with a deadline that keeps EVERY return value. The shared
+-- invoke() hands back only the first, and a roll answers with five.
+function K.invokeAll(timeout, ...)
+    local args = table.pack(...)
+    local done, out = false, nil
+    task.spawn(function()
+        local r = table.pack(pcall(function()
+            return GET:InvokeServer(EXEC.unpack(args, 1, args.n))
+        end))
+        if r[1] then out = table.pack(EXEC.unpack(r, 2, r.n)) end
+        done = true
+    end)
+    local deadline = os.clock() + (timeout or 5)
+    while not done and os.clock() < deadline do task.wait() end
+    return out
+end
+
+function K.famRarityOf(name)
+    if not K.FAM.rarity then
+        local map = {}
+        local F = MOD.Families
+        if type(F) == "table" then
+            for rar, t in pairs(F) do
+                if type(t) == "table" then
+                    for fam, def in pairs(t) do
+                        if type(def) == "table" then map[tostring(fam):lower()] = tostring(rar) end
+                    end
+                end
+            end
+        end
+        K.FAM.rarity = map
+    end
+    return K.FAM.rarity[tostring(name or ""):lower()]
+end
+
+function K.famWanted(name)
+    if name == nil or name == "" then return false end
+    local n = tostring(name):lower()
+    if type(CFG.FamilyWant) == "table" then
+        for _, w in ipairs(CFG.FamilyWant) do
+            if tostring(w):lower() == n then return true end
+        end
+    end
+    local floor = CFG.FamilyWantRarity and K.FAM.RANK[tostring(CFG.FamilyWantRarity):lower()]
+    if floor then
+        local r = K.famRarityOf(name)
+        local rank = r and K.FAM.RANK[r:lower()]
+        if rank and rank >= floor then return true end
+    end
+    return false
+end
+
+-- Prestige goal reached and at least one half of the feature switched on.
+function K.famPhase()
+    if CFG.AutoFamilyRoll == false and CFG.AutoBuySpins == false then return false end
+    local at = tonumber(CFG.FamilyAtPrestige) or num(CFG.PrestigeTarget, 5)
+    return num(STATE.prestige) >= at
+end
+
+-- Everything one decision needs, from a FRESH save: the roll count is the
+-- root Spins + Extra (what the ROLL button shows), the family is the
+-- avatar's, and the storage cap mirrors Customisation.Store.
+function K.famRead()
+    local d = getSave(true)
+    if type(d) ~= "table" or type(d.Slots) ~= "table" then return nil end
+    local slot = d.Slots[d.Current_Slot or slotKey()] or d.Slots[slotKey()]
+    if type(slot) ~= "table" then return nil end
+    local av  = type(slot.Avatar) == "table" and slot.Avatar or {}
+    local inv = type(slot.Inventory) == "table" and slot.Inventory or {}
+    local cap = 1 + num(type(slot.Extra_Slots) == "table" and slot.Extra_Slots.Family or 0)
+    pcall(function()
+        local gp = plr:FindFirstChild("Gamepasses")
+        local bag = gp and gp:FindFirstChild("Family_Bag")
+        if (bag and bag.Value == true)
+           or (type(d.Gamepasses) == "table" and d.Gamepasses.Family_Bag == true) then
+            cap = cap + 10
+        end
+    end)
+    return {
+        spins  = num(rawget(d, "Spins")) + num(rawget(d, "Extra")),
+        family = av.Family and tostring(av.Family) or nil,
+        pity   = num(av.Pity),
+        gems   = num(type(slot.Currency) == "table" and slot.Currency.Gems or 0),
+        stored = type(inv.Families) == "table" and #inv.Families or 0,
+        cap    = cap,
+    }
+end
+
+-- Turn gems into spins: SpinBuyQty packs (default ONE) of the configured
+-- pack, stepping down to smaller packs when it is out of reach. One at a time
+-- on purpose -- this only runs when the spins are gone, so nothing is lost, and
+-- a wanted family landing never leaves a pile of gems already converted.
+function K.famBuySpins(gems)
+    if CFG.AutoBuySpins == false then return false end
+    local shop  = MOD.Shop
+    local packs = type(shop) == "table" and shop.Spins
+    if type(packs) ~= "table" then
+        log("FAMILY", "Storage.Shop.Spins is missing — cannot buy spins")
+        return false
+    end
+    local budget = num(gems) - num(CFG.SpinGemReserve, 0)
+    local first  = math.clamp(math.floor(num(CFG.SpinPack, 5)), 1, #packs)
+    for idx = first, 1, -1 do
+        local p    = packs[idx]
+        local cost = type(p) == "table" and num(p.Cost) or 0
+        if cost > 0 and tostring(p.Currency) == "Gems" then
+            local qty = math.min(math.max(1, math.floor(num(CFG.SpinBuyQty, 1))), 99,
+                                 math.floor(budget / cost))
+            if qty >= 1 then
+                setAction("Buying %d x %s spins (%s gems)", qty, comma(num(p.Amount)), comma(qty * cost))
+                local res = invoke(8, "S_Market", "Buy", "Spins", idx, qty)
+                if type(res) == "table" then
+                    log("FAMILY", ("bought %s spins for %s gems (pack %d x%d)")
+                        :format(comma(qty * num(p.Amount)), comma(qty * cost), idx, qty))
+                    return true, qty * num(p.Amount), qty * cost
+                end
+                log("FAMILY", ("spin purchase refused: %s")
+                    :format(type(res) == "string" and res or "not enough gems"))
+                return false
+            end
+        end
+    end
+    return false
+end
+
+-- One roll. Sleeps out most of the cooldown, then polls: a nil inside the
+-- cooldown costs nothing, so polling is free. Returns nil only when the
+-- server keeps refusing past FamilyRefuseSeconds -- i.e. not allowed HERE.
+function K.famRollOnce()
+    local F = K.FAM
+    local wake = F.lastRoll + F.cooldown - 0.15
+    if os.clock() < wake then task.wait(wake - os.clock()) end
+    local deadline = os.clock() + num(CFG.FamilyRefuseSeconds, 10)
+    while alive() and os.clock() < deadline do
+        local r = K.invokeAll(4, "Family", "Roll")
+        if r and r[3] ~= nil then
+            F.lastRoll = os.clock()
+            return { spins = num(r[1]) + num(r[2]), family = tostring(r[3]), pity = num(r[4]) }
+        end
+        task.wait(0.06)
+    end
+    return nil
+end
+
+function K.famStore()
+    local r = K.invokeAll(5, "Family", "Store")
+    if r and r[1] == true then return tostring(r[2]), r[3] and tostring(r[3]) or nil end
+    return nil
+end
+
+-- Buy and roll until a wanted family is equipped, the spins and gems run out,
+-- or FamilyMaxRolls. Returns why it stopped:
+--   "wanted" | "nogems" | "nospins" | "cap" | "refused" | "nosave" | "off"
+function K.familySession(where)
+    local st = K.famRead()
+    if not st then return "nosave" end
+    -- A full session is up to ~27 minutes standing still (500 rolls x 3.3s),
+    -- past Roblox's 20-minute idle kick. The farm never needed this because it
+    -- teleports every mission.
+    if not K.FAM.afk then
+        K.FAM.afk = plr.Idled:Connect(function()
+            pcall(function()
+                VirtualUser:CaptureController()
+                VirtualUser:ClickButton2(Vector2.new(0, 0))
+            end)
+        end)
+    end
+    local rolled, maxRolls = 0, num(CFG.FamilyMaxRolls, 0)
+    log("FAMILY", ("%s: %s (%s), %s spins, %s gems")
+        :format(where, tostring(st.family), tostring(K.famRarityOf(st.family) or "?"),
+                comma(st.spins), comma(st.gems)))
+    -- What this session did, for the Discord summary (§41d).
+    local ctx = { where = where, rolled = 0, bought = 0, spent = 0, best = nil, bestRank = 0,
+                  t0 = os.clock() }
+    local postFloor = K.FAM.RANK[tostring(CFG.WebhookRollRarity or "legendary"):lower()] or 99
+    local function finish(why)
+        if ctx.rolled > 0 or ctx.bought > 0 then
+            st = K.famRead() or st
+            K.whRollSummary(ctx, st, why)
+            K.whFlush(6)
+        end
+        return why
+    end
+
+    while alive() do
+        -- 1. A wanted family is on: keep it (or bank it and roll on).
+        if K.famWanted(st.family) then
+            if CFG.FamilyStoreWanted and st.stored < st.cap then
+                local storedName, newFam = K.famStore()
+                if storedName then
+                    log("FAMILY", ("stored %s (%d/%d) — rolling on for more")
+                        :format(storedName, st.stored + 1, st.cap))
+                    K.whRoll("stored", storedName, st, rolled, where)
+                    st.stored = st.stored + 1
+                    st.family = newFam or st.family
+                    task.wait(0.6)
+                    continue
+                end
+            end
+            log("FAMILY", ("%s (%s) is a wanted family — rolling stops here")
+                :format(st.family, tostring(K.famRarityOf(st.family) or "?")))
+            STATE.family = st.family
+            -- Only when THIS session rolled it -- not on every lobby visit
+            -- that finds the kept family still equipped.
+            if rolled > 0 then K.whRoll("wanted", st.family, st, rolled, where) end
+            if CFG.FamilyDoneHandoff and not K.FAM.doneSent and _G.Horst_AccountChangeDone then
+                K.FAM.doneSent = true
+                pcall(_G.Horst_AccountChangeDone)
+                log("FAMILY", "handed the account back to the host")
+            end
+            return finish("wanted")
+        end
+
+        if maxRolls > 0 and rolled >= maxRolls then return finish("cap") end
+
+        -- 2. Out of spins: buy, or stop.
+        if st.spins <= 0 then
+            if CFG.AutoBuySpins == false then return finish("nospins") end
+            local okBuy, nSpins, nGems = K.famBuySpins(st.gems)
+            if not okBuy then return finish("nogems") end
+            ctx.bought = ctx.bought + num(nSpins)
+            ctx.spent  = ctx.spent + num(nGems)
+            task.wait(0.5)
+            st = K.famRead() or st
+            if st.spins <= 0 then return finish("nogems") end
+            continue
+        end
+        if CFG.AutoFamilyRoll == false then return finish("off") end
+
+        -- 3. Roll.
+        setAction("Family roll — %s · %s spins left", tostring(st.family), comma(st.spins))
+        local r = K.famRollOnce()
+        if not r then return finish("refused") end
+        rolled    = rolled + 1
+        ctx.rolled = rolled
+        st.spins  = r.spins
+        st.family = r.family
+        st.pity   = r.pity
+        STATE.family, STATE.spins = r.family, r.spins
+        local rar  = K.famRarityOf(r.family)
+        local rank = rar and (K.FAM.RANK[rar:lower()] or 0) or 0
+        if rank > ctx.bestRank then ctx.best, ctx.bestRank = r.family, rank end
+        if rank >= K.FAM.RANK.epic then
+            log("FAMILY", ("rolled %s (%s) — %s spins left, pity %d")
+                :format(r.family, rar, comma(r.spins), r.pity))
+        end
+        -- A wanted one gets its own card at the top of the loop; this is for
+        -- the rest that are still worth seeing.
+        if rank >= postFloor and not K.famWanted(r.family) then
+            K.whRoll("roll", r.family, st, rolled, where)
+        end
+        -- Gems only matter again once the spins run out; re-read then.
+        if st.spins <= 0 then st = K.famRead() or st end
+    end
+    return finish("off")
+end
+
+function K.famWhere()
+    local v = nil
+    pcall(function()
+        if EXEC.isfile and EXEC.readfile and EXEC.isfile(K.FAM.WHERE_FILE) then
+            v = EXEC.readfile(K.FAM.WHERE_FILE)
+        end
+    end)
+    return v
+end
+
+function K.famSetWhere(v)
+    pcall(function() if EXEC.writefile then EXEC.writefile(K.FAM.WHERE_FILE, v) end end)
+end
+
+-- Ask the title screen to roll before it clicks Play.
+function K.famGoMenu()
+    pcall(function()
+        if EXEC.writefile then EXEC.writefile(K.FAM.MENU_FILE, tostring(os.time())) end
+    end)
+    setAction("Family roll — going to the menu")
+    log("FAMILY", "rolls happen on the title screen — teleporting to the menu")
+    pcall(function() game:GetService("TeleportService"):Teleport(PLACE.TITLE, plr) end)
+end
+
+function K.famMenuPending()
+    local pending = false
+    pcall(function()
+        if EXEC.isfile and EXEC.readfile and EXEC.isfile(K.FAM.MENU_FILE) then
+            local t = tonumber(EXEC.readfile(K.FAM.MENU_FILE)) or 0
+            pending = (os.time() - t) < 1800
+        end
+    end)
+    return pending
+end
+
+function K.famMenuClear()
+    pcall(function()
+        if EXEC.writefile then EXEC.writefile(K.FAM.MENU_FILE, "0") end
+    end)
+end
+
+-- The lobby side. Runs once per lobby visit; returns true when the lobby
+-- should hold here instead of staging a mission.
+function K.famLobby()
+    if K.FAM.hold then return true end
+    if K.FAM.visitDone or not K.famPhase() then return false end
+    K.FAM.visitDone = true
+
+    local where = K.famWhere()
+    -- Refused in the lobby AND on the title screen: something about this
+    -- account or build blocks rolls. Farm on and look again in six hours
+    -- rather than bouncing between the two places every visit.
+    if where and where:sub(1, 5) == "none:" then
+        if os.time() - (tonumber(where:sub(6)) or 0) < 21600 then return false end
+        where = nil
+    end
+
+    local why
+    if where == "menu" then
+        -- Rolls are known not to work here: buy here, roll there.
+        local st = K.famRead()
+        if not st or K.famWanted(st.family) then
+            why = st and "wanted" or "nosave"
+        else
+            if st.spins <= 0 and CFG.AutoBuySpins ~= false then
+                local okBuy, nSpins, nGems = K.famBuySpins(st.gems)
+                if okBuy then
+                    st = K.famRead() or st
+                    K.whCard(("🛒 Bought %s spins for %s gems"):format(comma(num(nSpins)), comma(num(nGems))),
+                        nil, 0x38BDF8, "rolling on the title screen next")
+                end
+            end
+            if st.spins > 0 and CFG.AutoFamilyRoll ~= false then
+                K.FAM.hold, K.FAM.menuAt = "menu", os.clock()
+                K.whFlush(6)
+                K.famGoMenu()
+                return true
+            end
+            why = "nogems"
+        end
+    else
+        why = K.familySession("lobby")
+        if why == "refused" then
+            K.famSetWhere("menu")
+            log("FAMILY", "the lobby refuses rolls — they will be done on the title screen")
+            K.FAM.hold, K.FAM.menuAt = "menu", os.clock()
+            K.famGoMenu()
+            return true
+        end
+        K.famSetWhere("lobby")
+    end
+    log("FAMILY", "lobby session ended: " .. tostring(why))
+    refreshState(true)
+    if CFG.FamilyKeepFarming == false and why ~= "nosave" then
+        K.FAM.hold = "idle"
+    end
+    return K.FAM.hold ~= nil
+end
+
+-- The title-screen side: roll here when the lobby asked for it.
+function K.famTitle()
+    if not K.famMenuPending() then return end
+    K.famMenuClear()
+    refreshState(true)
+    if not K.famPhase() then return end
+    local why = K.familySession("menu")
+    log("FAMILY", "title-screen session ended: " .. tostring(why))
+    if why == "refused" then
+        K.famSetWhere("none:" .. tostring(os.time()))
+        log("FAMILY", "rolls are refused on the title screen too — not trying again for 6h")
+    end
+end
+
+-- ═══════════════════════════════════════════════════════════════════════════
 -- 36 · QUESTS
 --     v9 fired ~90 accept calls every five minutes from a hardcoded tag list,
 --     regardless of whether those quests existed or were already claimed. v10
@@ -9094,6 +9545,10 @@ K.boostsPass = function()
                 end
             end
             if acted then break end
+
+            -- From the family phase on (§35b) gems are for spins: a 2h boost
+            -- is 13,999 gems, i.e. ~155 rolls. Inventory boosts above still run.
+            if K.famPhase() and CFG.FamilyStopGemBoosts ~= false then break end
 
             -- Then gems, if the user opted in.
             --
@@ -9809,6 +10264,29 @@ local function runLobby()
             end
         end
 
+        -- ── after the prestige target: spins + family roll (§35b) ─────────
+        -- Once per lobby visit. Blocks while it buys and rolls; true means
+        -- hold here (a menu teleport is in flight, or FamilyKeepFarming=false).
+        if K.famLobby() then
+            if K.FAM.hold == "menu" then
+                -- The teleport normally lands within seconds. If it has not,
+                -- drop the hold and farm rather than idle in the lobby.
+                if os.clock() - (K.FAM.menuAt or 0) > 45 then
+                    K.FAM.hold = nil
+                    K.famSetWhere("none:" .. tostring(os.time()))
+                    log("FAMILY", "menu teleport did not happen — farming on, rolls paused 6h")
+                else
+                    setAction("Family roll — waiting for the menu teleport")
+                    task.wait(2)
+                    continue
+                end
+            else
+                setAction("Family goal done — holding in the lobby (FamilyKeepFarming = false)")
+                task.wait(10)
+                continue
+            end
+        end
+
         -- ── do not route on a save that has not arrived ───────────────────
         --
         -- Every Thunder Spear gate reads the save: isMaxed() needs maxXp, and
@@ -10050,6 +10528,9 @@ local function runTitle()
         end)
         return true
     end
+
+    -- The lobby sends the bot here when rolls only work on the title screen.
+    pcall(K.famTitle)
 
     while alive() and game.PlaceId == PLACE.TITLE do
         pcall(function()
@@ -10589,7 +11070,7 @@ end
 function K.whStart()
     K.WH.run    = { at = os.clock(), have = false }
     K.WH.posted = false
-    if not K.whEnabled() then return end
+    if not K.whEnabled() or CFG.WebhookMissions == false then return end
 
     task.spawn(function()
         local deadline = os.clock() + 30
@@ -10628,7 +11109,7 @@ end
 
 -- ── End-of-mission embed ────────────────────────────────────────
 function K.whMission(choice, why)
-    if not K.whEnabled() then return end
+    if not K.whEnabled() or CFG.WebhookMissions == false then return end
     if K.WH.posted then return end
     K.WH.posted = true
 
@@ -10839,6 +11320,84 @@ function K.whAlert(kind, title, text)
             } },
         })
     end)
+end
+
+-- ── Family roll posts (§35b) ──────────────────────────────────────
+-- Separate switch from the mission report: WebhookMissions = false keeps the
+-- channel to rolls and alerts only. Same queue, so the same throttling rules.
+K.WH_RARITY = { common = 0x9CA3AF, uncommon = 0x4ADE80, rare = 0x38BDF8, epic = 0xA78BFA,
+                legendary = 0xFBBF24, mythic = 0xF87171, exclusive = 0x2DD4BF, secret = 0xF472B6 }
+
+function K.whRollsOn()
+    return CFG.WebhookRolls ~= false and K.whEnabled()
+end
+
+function K.whCard(title, rows, color, footer, description)
+    if not K.whRollsOn() then return end
+    pcall(function()
+        local name = tostring(plr.Name)
+        local disp = tostring(plr.DisplayName or name)
+        K.whPush({
+            username   = tostring(CFG.WebhookUsername or "VC+ AOTR"),
+            avatar_url = (type(CFG.WebhookAvatar) == "string") and CFG.WebhookAvatar or nil,
+            embeds = { {
+                author = {
+                    name     = (disp == name) and ("@" .. name) or ("%s (@%s)"):format(disp, name),
+                    icon_url = ("https://www.roblox.com/headshot-thumb/image"
+                                .. "?userId=%d&width=150&height=150&format=png"):format(plr.UserId),
+                },
+                title       = tostring(title),
+                description = description,
+                color       = color or 0x38BDF8,
+                fields      = rows and { { name = "Family", value = K.whBlock(rows), inline = false } } or nil,
+                footer      = footer and { text = tostring(footer) } or nil,
+                timestamp   = os.date("!%Y-%m-%dT%H:%M:%SZ"),
+            } },
+        })
+    end)
+end
+
+-- One rolled family. kind: "roll" (WebhookRollRarity or rarer) | "wanted" | "stored"
+function K.whRoll(kind, family, st, n, where)
+    local rar   = K.famRarityOf(family) or "?"
+    local title = (kind == "wanted") and ("⭐ %s (%s) — keeping it")
+               or (kind == "stored") and ("📦 %s (%s) — stored, rolling on")
+               or "🎲 Rolled %s (%s)"
+    K.whCard(title:format(tostring(family), rar), {
+        { "Prestige",   STATE.prestige },
+        { "Spins left", comma(st.spins) },
+        { "Gems",       comma(st.gems) },
+        { "Pity",       ("%d / 400"):format(num(st.pity)) },
+    }, K.WH_RARITY[rar:lower()] or 0x9CA3AF, ("Roll #%d this session · %s"):format(n, where))
+end
+
+K.WH_ROLL_END = {
+    wanted  = "got a wanted family",
+    nogems  = "out of gems",
+    nospins = "out of spins (AutoBuySpins is off)",
+    cap     = "FamilyMaxRolls reached",
+    refused = "rolls refused here — moving to the title screen",
+    off     = "stopped",
+}
+
+function K.whRollSummary(ctx, st, why)
+    local best = ctx.best and ("%s (%s)"):format(ctx.best, K.famRarityOf(ctx.best) or "?") or "-"
+    K.whCard("🎲 Roll session — " .. tostring(K.WH_ROLL_END[why] or why), {
+        { "Rolls",        comma(ctx.rolled) },
+        { "Spins bought", (ctx.bought > 0) and ("%s (%s gems)"):format(comma(ctx.bought), comma(ctx.spent)) or "0" },
+        { "Best roll",    best },
+        { "Family now",   ("%s (%s)"):format(tostring(st.family), K.famRarityOf(st.family) or "?") },
+        { "Spins left",   comma(st.spins) },
+        { "Gems left",    comma(st.gems) },
+        { "Time",         K.whClock(os.clock() - ctx.t0) },
+    }, (why == "wanted") and 0x4ADE80 or (why == "refused") and 0xFB923C or 0x38BDF8,
+    ("Prestige %s · %s"):format(tostring(STATE.prestige), tostring(ctx.where)))
+end
+
+-- Give the queue a moment before a teleport kills this VM with posts in it.
+function K.whFlush(timeout)
+    if not K.whEnabled() then return end
+    waitUntil(function() return #K.WH.q == 0 and not K.WH.busy end, timeout or 6, 0.2)
 end
 
 -- ═══════════════════════════════════════════════════════════════════════════
