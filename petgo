@@ -563,7 +563,7 @@ K.DEFAULTS = {
     PreferDamageTalents = true,
 
     AutoPrestige        = true,
-    PrestigeTarget      = 5,
+    PrestigeTarget      = 4,
     -- How many rejected Prestige calls to absorb in one lobby visit before
     -- giving up and farming on. Without a bound a rejection wedges the bot
     -- at the level cap permanently.
