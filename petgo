@@ -591,7 +591,7 @@ K.DEFAULTS = {
     SpinBuyQty          = 1,            -- packs per purchase (buys again only when spins hit 0)
     SpinGemReserve      = 0,            -- gems that must remain after a purchase
     -- Stop rolling (and keep the family) on any of these names...
-    FamilyWant          = { "Shiki", "Fritz", "Helos", "Ackerman" },
+    FamilyWant          = {},
     -- ...or on any family of this rarity or rarer. nil = names only.
     -- Common < Rare < Epic < Legendary < Mythic < Secret
     FamilyWantRarity    = "Mythic",
@@ -601,7 +601,7 @@ K.DEFAULTS = {
     FamilyMaxRolls      = 0,            -- per lobby visit, 0 = until done or out of spins
     -- false = once the goal is met or the gems run out, stay in the lobby
     -- instead of farming more gems for the next round of spins.
-    FamilyKeepFarming   = true,
+    FamilyKeepFarming   = false,
     -- Call _G.Horst_AccountChangeDone() once a wanted family is equipped.
     FamilyDoneHandoff   = false,
     -- From the family phase on, do not spend gems on XP/Gold boosts (boosts
