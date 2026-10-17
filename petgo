@@ -8974,7 +8974,7 @@ K.FAM = {
              mythic = 6, exclusive = 7, secret = 8 },
     rarity   = nil,     -- lower(name) -> rarity, from Storage.Families
     lastRoll = 0,
-    cooldown = 3.30,
+    cooldown = 1,
     -- Disk, because the verdict has to cross the teleport to the menu.
     WHERE_FILE = ("VCPlus_FamilyWhere_%s_%s.txt"):format(tostring(game.GameId), tostring(plr.UserId)),
     MENU_FILE  = ("VCPlus_FamilyMenu_%s_%s.txt"):format(tostring(game.GameId), tostring(plr.UserId)),
