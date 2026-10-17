@@ -827,7 +827,6 @@ K.DEFAULTS = {
     -- goes out to every user is a live secret handed to every user: anyone can
     -- read it out of the loader and post to that channel, and every client that
     -- did not set its own would report into it. Set it in your own config.
-    Webhook             = true,
     Webhook             = "https://discord.com/api/webhooks/1331926354874204221/vxpGYZgmiaVxOv1mhzEWTH5BCeRkmPiRx3CJgwU2NklYOfQIhPJWL6TQtU8iPPl41ivo",
     -- The name the message is posted UNDER, in Discord. The Roblox account's
     -- own username is a separate thing and always appears in the embed itself.
