@@ -12391,8 +12391,9 @@ do
                 DisplayOrder = 1002, Enabled = false,
             }, host)
             local panel = U.new("Frame", {
-                Name = "FamilyPanel", AnchorPoint = Vector2.new(0.5, 0.5),
-                Position = UDim2.new(0.5, 0, 0.5, 0), Size = UDim2.new(0, 590, 0, 440),
+                Name = "FamilyPanel", AnchorPoint = Vector2.new(0, 0),
+                -- Top-left monitor area requested by the user.
+                Position = UDim2.new(0, 42, 0, 24), Size = UDim2.new(0, 590, 0, 440),
                 BackgroundColor3 = U.C.panel, BackgroundTransparency = 0.04,
                 BorderSizePixel = 0, Active = false,
             }, gui)
