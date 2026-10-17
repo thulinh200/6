@@ -588,7 +588,7 @@ K.DEFAULTS = {
     -- Pack 5 is the cheapest per spin (90 vs 100). If it is not affordable the
     -- next smaller pack is tried.
     SpinPack            = 5,
-    SpinBuyQty          = 3,            -- packs per purchase (buys again only when spins hit 0)
+    SpinBuyQty          = 99,            -- packs per purchase (buys again only when spins hit 0)
     SpinGemReserve      = 0,            -- gems that must remain after a purchase
     -- Stop rolling (and keep the family) on any of these names...
     FamilyWant          = {},
