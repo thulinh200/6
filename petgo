@@ -856,7 +856,7 @@ K.DEFAULTS = {
     -- or better, a highlighted one when a WANTED family lands, and one summary
     -- per roll session (rolls used, spins bought, gems spent, best family).
     WebhookRolls        = true,
-    WebhookRollRarity   = "Legendary",  -- Common < Rare < Epic < Legendary < Mythic < Secret
+    WebhookRollRarity   = "Mythic",  -- Common < Rare < Epic < Legendary < Mythic < Secret
 
     ------------------------------------------------------------ vc+ tracking
     -- Reports this account's stats to the Accounts page on vcplus.xyz (§41e):
