@@ -9155,7 +9155,18 @@ function K.familySession(where)
     local ctx = { where = where, rolled = 0, bought = 0, spent = 0, best = nil, bestRank = 0,
                   t0 = os.clock() }
     local postFloor = K.FAM.RANK[tostring(CFG.WebhookRollRarity or "legendary"):lower()] or 99
+    K.FAMUI = K.FAMUI or { history = {}, total = 0 }
+    K.FAMUI.sessionRolls, K.FAMUI.sessionSpent = 0, 0
+    if K.FAMUI.refs and K.FAMUI.refs.gui then K.FAMUI.refs.gui.Enabled = true end
+    K.famUIRefresh(st, "Đang bắt đầu · " .. tostring(where), 0, 0)
     local function finish(why)
+        local finishLabels = {
+            wanted = "Đã tìm thấy Family mục tiêu", nogems = "Dừng: không đủ Gems mua Spin",
+            nospins = "Dừng: hết Spin", cap = "Dừng: đạt giới hạn lượt quay",
+            refused = "Dừng: server từ chối lượt quay", nosave = "Dừng: không đọc được save",
+            off = "Đã tắt Family Roll",
+        }
+        K.famUIRefresh(K.famRead() or st, finishLabels[why] or ("Đã dừng: " .. tostring(why)), rolled, ctx.spent)
         if ctx.rolled > 0 or ctx.bought > 0 then
             st = K.famRead() or st
             K.whRollSummary(ctx, st, why)
@@ -9202,8 +9213,11 @@ function K.familySession(where)
             if not okBuy then return finish("nogems") end
             ctx.bought = ctx.bought + num(nSpins)
             ctx.spent  = ctx.spent + num(nGems)
+            K.FAMUI.sessionSpent = ctx.spent
+            K.famUIRefresh(st, ("Đã mua %s Spin · đang cập nhật save"):format(comma(num(nSpins))), rolled, ctx.spent)
             task.wait(0.5)
             st = K.famRead() or st
+            K.famUIRefresh(st, "Đang quay Family", rolled, ctx.spent)
             if st.spins <= 0 then return finish("nogems") end
             continue
         end
@@ -9220,6 +9234,9 @@ function K.familySession(where)
         st.pity   = r.pity
         STATE.family, STATE.spins = r.family, r.spins
         local rar  = K.famRarityOf(r.family)
+        K.famUIAddHistory(r.family, rar or "?", r.spins, r.pity)
+        K.FAMUI.sessionRolls = rolled
+        K.famUIRefresh(st, "Đang quay Family", rolled, ctx.spent)
         local rank = rar and (K.FAM.RANK[rar:lower()] or 0) or 0
         if rank > ctx.bestRank then ctx.best, ctx.bestRank = r.family, rank end
         if rank >= K.FAM.RANK.epic then
@@ -12312,6 +12329,123 @@ do
         obj[prop] = value
     end
 
+    -- Dedicated Family Roll overlay. It is independent of StatusUI so it can
+    -- be shown even when the general dashboard is disabled. Values are fed by
+    -- the existing save reader and the actual Family/Roll server response.
+    K.FAMUI = K.FAMUI or { history = {}, total = 0, status = "Chờ Family Roll" }
+
+    function K.famUIAddHistory(name, rarity, spins, pity)
+        local H = K.FAMUI
+        table.insert(H.history, 1, {
+            name = tostring(name or "?"), rarity = tostring(rarity or "?"),
+            spins = num(spins), pity = num(pity), at = os.date("%H:%M:%S"),
+        })
+        while #H.history > 12 do table.remove(H.history) end
+        H.total = H.total + 1
+        K.famUIRefresh()
+    end
+
+    function K.famUIRefresh(st, status, rolled, spent)
+        local R = K.FAMUI and K.FAMUI.refs
+        if not R then return end
+        st = st or K.famRead() or {}
+        if status then K.FAMUI.status = status end
+        if rolled ~= nil then K.FAMUI.sessionRolls = rolled end
+        if spent ~= nil then K.FAMUI.sessionSpent = spent end
+        local function put(obj, value)
+            if obj then obj.Text = tostring(value) end
+        end
+        put(R.status, K.FAMUI.status or "Đang xử lý")
+        put(R.family, st.family or "?")
+        put(R.rarity, K.famRarityOf(st.family) or "?")
+        put(R.gems, comma(num(st.gems)))
+        put(R.spins, comma(num(st.spins)))
+        put(R.pity, tostring(num(st.pity)))
+        put(R.storage, ("%s / %s"):format(comma(num(st.stored)), comma(num(st.cap))))
+        put(R.rolled, comma(num(K.FAMUI.sessionRolls)))
+        put(R.spent, comma(num(K.FAMUI.sessionSpent)))
+        for i = 1, 12 do
+            local item = K.FAMUI.history[i]
+            local row = R.history[i]
+            if row then
+                row.Visible = item ~= nil
+                if item then
+                    row.Text = ("%s  %s  ·  %s  ·  còn %s Spin  ·  pity %s")
+                        :format(item.at, item.name, item.rarity, comma(item.spins), tostring(item.pity))
+                end
+            end
+        end
+    end
+
+    function K.buildFamilyRollUI()
+        if K.FAMUI and K.FAMUI.built then return end
+        K.FAMUI = K.FAMUI or { history = {}, total = 0, status = "Chờ Family Roll" }
+        local ok, err = pcall(function()
+            local host
+            if typeof(gethui) == "function" then host = gethui() end
+            host = host or plr:FindFirstChildOfClass("PlayerGui")
+            if not host then return end
+            local gui = U.new("ScreenGui", {
+                Name = "VCPlus_FamilyRoll", ResetOnSpawn = false,
+                IgnoreGuiInset = true, ZIndexBehavior = Enum.ZIndexBehavior.Sibling,
+                DisplayOrder = 1002, Enabled = false,
+            }, host)
+            local panel = U.new("Frame", {
+                Name = "FamilyPanel", AnchorPoint = Vector2.new(0.5, 0.5),
+                Position = UDim2.new(0.5, 0, 0.5, 0), Size = UDim2.new(0, 590, 0, 440),
+                BackgroundColor3 = U.C.panel, BackgroundTransparency = 0.04,
+                BorderSizePixel = 0, Active = false,
+            }, gui)
+            U.corner(panel, 12)
+            U.new("UIStroke", { Color = U.C.accent, Transparency = 0.35, Thickness = 1 }, panel)
+            U.new("Frame", { BackgroundColor3 = U.C.accent, BorderSizePixel = 0,
+                Size = UDim2.new(1, 0, 0, 4), Active = false }, panel)
+            local function label(name, pos, size, textValue, color, textSize, font)
+                return U.label(panel, { Name = name, Position = pos, Size = size,
+                    Text = textValue, TextColor3 = color or U.C.text,
+                    TextSize = textSize or 14, Font = font or Enum.Font.Gotham,
+                    TextXAlignment = Enum.TextXAlignment.Left,
+                    TextYAlignment = Enum.TextYAlignment.Center,
+                    TextTruncate = Enum.TextTruncate.AtEnd })
+            end
+            label("Title", UDim2.new(0, 20, 0, 15), UDim2.new(0.65, 0, 0, 30),
+                "FAMILY ROLL  /  LIVE MONITOR", U.C.accent, 18, Enum.Font.GothamBold)
+            local status = label("Status", UDim2.new(0, 20, 0, 48), UDim2.new(1, -40, 0, 24),
+                "Chờ Family Roll", U.C.ok, 13, Enum.Font.GothamMedium)
+            U.new("Frame", { BackgroundColor3 = U.C.rule, BackgroundTransparency = 0.88,
+                BorderSizePixel = 0, Position = UDim2.new(0, 20, 0, 79),
+                Size = UDim2.new(1, -40, 0, 1), Active = false }, panel)
+            local function metric(name, x, y, title)
+                label(name .. "Label", UDim2.new(0, x, 0, y), UDim2.new(0, 120, 0, 17), title, U.C.dim, 11)
+                return label(name, UDim2.new(0, x, 0, y + 17), UDim2.new(0, 150, 0, 23), "--", U.C.text, 16, Enum.Font.RobotoMono)
+            end
+            local family = metric("Family", 20, 94, "FAMILY HIỆN TẠI")
+            local rarity = metric("Rarity", 315, 94, "ĐỘ HIẾM")
+            local gems = metric("Gems", 20, 145, "GEMS CÒN")
+            local spins = metric("Spins", 165, 145, "SPIN CÒN")
+            local pity = metric("Pity", 315, 145, "PITY")
+            local storage = metric("Storage", 445, 145, "KHO FAMILY")
+            local rolled = metric("Rolled", 20, 196, "ĐÃ QUAY")
+            local spent = metric("Spent", 165, 196, "GEMS ĐÃ CHI")
+            label("HistoryTitle", UDim2.new(0, 20, 0, 247), UDim2.new(1, -40, 0, 22),
+                "LỊCH SỬ FAMILY GẦN NHẤT", U.C.accent, 12, Enum.Font.GothamBold)
+            local history = {}
+            for i = 1, 12 do
+                history[i] = label("History" .. i, UDim2.new(0, 20, 0, 272 + (i - 1) * 12),
+                    UDim2.new(1, -40, 0, 12), "", U.C.text, 10, Enum.Font.RobotoMono)
+                history[i].Visible = false
+            end
+            label("Footer", UDim2.new(0, 20, 1, -24), UDim2.new(1, -40, 0, 14),
+                "UI dùng dữ liệu save/server thật · lịch sử tối đa 12 lượt", U.C.faint, 10)
+            K.FAMUI.refs = { gui = gui, status = status, family = family, rarity = rarity,
+                gems = gems, spins = spins, pity = pity, storage = storage,
+                rolled = rolled, spent = spent, history = history }
+            K.FAMUI.built = true
+            K.famUIRefresh()
+        end)
+        if not ok then log("UI", "family roll panel failed: " .. tostring(err)) end
+    end
+
     function K.buildStatusUI()
         if K.UI.built or CFG.StatusUI == false then return end
         K.UI.built = true
@@ -13061,6 +13195,7 @@ end)
 -- 1000 over panel 999, toggle 1001 over both.
 K.playIntro()
 K.buildStatusUI()
+K.buildFamilyRollUI()
 
 log("BOOT", ("v10 starting · place %d · %s")
     :format(game.PlaceId, placeKind() or "unknown"))
