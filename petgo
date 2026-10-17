@@ -537,7 +537,7 @@ K.DEFAULTS = {
     -- bought. Upgrades raise Potential, and Potential is the ONLY thing that
     -- unlocks a higher difficulty tier — so this is the setting that decides
     -- whether the account climbs or stays put. 0 disables the trip entirely.
-    LobbyEvery          = 6,
+    LobbyEvery          = 10,
     AutoDeletePerk      = true,
     PerkSellTarget      = nil,          -- nil = derived from difficulty rank
     SmartSkills         = true,         -- solve the unlock frontier, don't spam
