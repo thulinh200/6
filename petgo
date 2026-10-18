@@ -848,10 +848,10 @@ K.DEFAULTS = {
     -- Also post when the account status flips to flagged, or when a run is
     -- abandoned for making no progress. These are the two things worth being
     -- told about while you are not watching.
-    WebhookAlerts       = true,
+    WebhookAlerts       = false,
     -- The end-of-mission report above. false = no mission posts at all (the
     -- roll posts and alerts still go out).
-    WebhookMissions     = true,
+    WebhookMissions     = false,
     -- Family roll posts (§35b): a card for every family rolled at this rarity
     -- or better, a highlighted one when a WANTED family lands, and one summary
     -- per roll session (rolls used, spins bought, gems spent, best family).
