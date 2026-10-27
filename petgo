@@ -563,7 +563,7 @@ K.DEFAULTS = {
     PreferDamageTalents = true,
 
     AutoPrestige        = true,
-    PrestigeTarget      = 3,
+    PrestigeTarget      = 5,
     -- How many rejected Prestige calls to absorb in one lobby visit before
     -- giving up and farming on. Without a bound a rejection wedges the bot
     -- at the level cap permanently.
@@ -582,7 +582,7 @@ K.DEFAULTS = {
     -- lands or the spins run out, then goes back to farming for more gems.
     AutoFamilyRoll      = true,
     AutoBuySpins        = true,
-    FamilyAtPrestige    = 3,          -- nil = PrestigeTarget
+    FamilyAtPrestige    = 5,          -- nil = PrestigeTarget
     -- Spin packs (Storage.Shop.Spins), all paid in gems:
     --   1 = 5 / 500   2 = 25 / 2,500   3 = 100 / 10,000   4 = 250 / 23,000   5 = 500 / 45,000
     -- Pack 5 is the cheapest per spin (90 vs 100). If it is not affordable the
