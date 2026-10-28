@@ -591,16 +591,13 @@ K.DEFAULTS = {
     SpinBuyQty          = 99,            -- packs per purchase (buys again only when spins hit 0)
     SpinGemReserve      = 0,            -- gems that must remain after a purchase
     -- Stop rolling (and keep the family) on any of these names...
-    FamilyWant          = { "Fritz", "Helos" },
+    FamilyWant          = {},
     -- ...or on any family of this rarity or rarer. nil = names only.
     -- Common < Rare < Epic < Legendary < Mythic < Secret
     FamilyWantRarity    = "Mythic",
     -- Put a wanted family into a free storage slot and keep rolling for more.
     -- Storage holds 1 + Extra_Slots.Family (+10 with the Family Bag gamepass).
     FamilyStoreWanted   = true,
-    FamilyFillTargetStorage = true, -- collect Fritz/Helos until storage is full
-    FamilyDeleteNonTargets = true,  -- explicitly authorized: free one slot when needed
-    FamilyStoreRetryDelay = 30,     -- seconds before rejoining to retry a failed Store
     FamilyMaxRolls      = 0,            -- per lobby visit, 0 = until done or out of spins
     -- false = once the goal is met or the gems run out, stay in the lobby
     -- instead of farming more gems for the next round of spins.
@@ -614,9 +611,6 @@ K.DEFAULTS = {
     ---------------------------------------------------------------- quests
     AutoQuest           = true,
     SmartQuests         = true,         -- claim only what the save says exists
-    AutoClaimAchievements = true,
-    AchievementClaimInterval = 60,
-    AchievementClaimsPerPass = 20,
     AutoThunderSpearQuest = true,
     ThunderSpearAtPrestige = 2,
     -- Chase the Handle part too. Its Escort quest had no server-side handler
@@ -867,7 +861,6 @@ K.DEFAULTS = {
     -- Bật true: Chỉ gửi thông báo khi lưu Family vào kho (stored) hoặc giữ lại (wanted) như ảnh người dùng gửi.
     -- Tự động chặn các thông báo khác (mua spin, tổng kết session, các lần roll mythic thường, mission, alerts).
     WebhookOnlyStored   = true,
-    WebhookFamilyProtection = true, -- always report protection/store outcomes
 
     ------------------------------------------------------------ vc+ tracking
     -- Reports this account's stats to the Accounts page on vcplus.xyz (§41e):
@@ -876,7 +869,7 @@ K.DEFAULTS = {
     -- key. The key is VCPlusKey below, else getgenv().VCPlusKey (the loader line
     -- `getgenv().VCPlusKey = script_key`), else a script_key still visible, else
     -- the copy this PC saved the first time it saw one. false = no reports.
-    VCPlusTrack         = false,
+    VCPlusTrack         = true,
     VCPlusURL           = "https://vcplus.xyz",
     VCPlusKey           = nil,          -- nil = the loader's key (see above)
     VCPlusEvery         = 60,           -- seconds between reports (20-600)
@@ -8989,126 +8982,7 @@ K.FAM = {
     -- Disk, because the verdict has to cross the teleport to the menu.
     WHERE_FILE = ("VCPlus_FamilyWhere_%s_%s.txt"):format(tostring(game.GameId), tostring(plr.UserId)),
     MENU_FILE  = ("VCPlus_FamilyMenu_%s_%s.txt"):format(tostring(game.GameId), tostring(plr.UserId)),
-    PROTECT_FILE = ("VCPlus_FamilyProtected_%s.json"):format(tostring(plr.UserId)),
 }
-
-function K.famProtected(name)
-    local n = tostring(name or ""):lower()
-    return n == "fritz" and "Fritz" or n == "helos" and "Helos" or nil
-end
-
-function K.famProtection()
-    if not K.FAM.protectionLoaded then
-        K.FAM.protectionLoaded = true
-        pcall(function()
-            if EXEC.isfile and EXEC.readfile and EXEC.isfile(K.FAM.PROTECT_FILE) then
-                local d = HttpService:JSONDecode(EXEC.readfile(K.FAM.PROTECT_FILE))
-                if type(d) == "table" and K.famProtected(d.family) then
-                    d.persisted = true
-                    K.FAM.protection = d
-                end
-            end
-        end)
-    end
-    return K.FAM.protection
-end
-
-function K.famLatch(name, status, reason, meta)
-    local previous = K.FAM.protection
-    local d = { family = K.famProtected(name), status = status, reason = reason, at = os.time() }
-    if not d.family then return end
-    if previous and previous.family == d.family then
-        for _, key in ipairs({ "storedBefore", "retryAt", "attempts", "failedJob", "lastNoticeAt", "lastNoticeKind" }) do
-            d[key] = previous[key]
-        end
-    end
-    if type(meta) == "table" then for key, value in pairs(meta) do d[key] = value end end
-    K.FAM.protectionLoaded, K.FAM.protection = true, d
-    _G.VCP_FamilyProtectionStatus = d
-    local ok = false
-    if EXEC.writefile then
-        ok = pcall(EXEC.writefile, K.FAM.PROTECT_FILE, HttpService:JSONEncode(d))
-    end
-    d.persisted = ok
-end
-
--- Only clear after manually collecting/reviewing the protected family, then
--- re-run the farm. A failed/ambiguous save never automatically unlocks rolling.
-_G.VCP_ClearFamilyProtection = function()
-    if EXEC.writefile then EXEC.writefile(K.FAM.PROTECT_FILE, "{}") end
-    K.FAM.protectionLoaded, K.FAM.protection = true, nil
-    K.FAM.hold, K.FAM.protectedMenuRequested, K.FAM.nextRecoveryAt = nil, nil, nil
-    _G.VCP_FamilyProtectionStatus = nil
-end
-
-function K.famRelease()
-    local ok = true
-    if EXEC.writefile then ok = pcall(EXEC.writefile, K.FAM.PROTECT_FILE, "{}") end
-    K.FAM.protectionLoaded, K.FAM.protection = true, nil
-    K.FAM.hold, K.FAM.protectedMenuRequested, K.FAM.nextRecoveryAt = nil, nil, nil
-    K.FAM.visitDone = false
-    _G.VCP_FamilyProtectionStatus = { status = "rolling", at = os.time(), checkpointCleared = ok }
-end
-
-function K.famTargetCount(st)
-    local count = 0
-    for _, amount in pairs(st and st.familyCounts or {}) do count = count + num(amount) end
-    return count
-end
-
-function K.famTargetFull(st)
-    return st and type(st.familyCounts) == "table" and num(st.cap) > 0 and K.famTargetCount(st) >= st.cap
-end
-
-function K.famNotify(kind, name, reason, st, where)
-    local checkpoint = K.famProtection()
-    local now = os.time()
-    if checkpoint and checkpoint.lastNoticeKind == kind and now - num(checkpoint.lastNoticeAt) < 120 then return end
-    if checkpoint then checkpoint.lastNoticeKind, checkpoint.lastNoticeAt = kind, now end
-    pcall(K.whProtected, kind, name, reason, st, where)
-end
-
-function K.famRetry(name, reason, st, where, storedBefore)
-    local old = K.famProtection()
-    K.famLatch(name, "store_retry", reason, {
-        storedBefore = storedBefore or (old and old.storedBefore),
-        retryAt = os.time() + math.max(5, num(CFG.FamilyStoreRetryDelay, 30)),
-        attempts = num(old and old.attempts) + 1,
-        failedJob = game.JobId,
-    })
-    K.FAM.hold = "protected_retry"
-    K.famNotify("store_retry", name, reason, st, where)
-    return true, st
-end
-
-function K.famRequestMenu()
-    local checkpoint = K.famProtection()
-    if not checkpoint then return false end
-    if not checkpoint.persisted then return false end
-    if K.FAM.protectedMenuRequested and os.clock() - num(K.FAM.protectedMenuAt) < 60 then return true end
-    K.famLatch(checkpoint.family, "store_needs_menu", "Rejoining the roll menu to retry Store", { retryAt = 0 })
-    K.FAM.protectedMenuRequested, K.FAM.protectedMenuAt = true, os.clock()
-    pcall(K.whFlush, 6)
-    K.famGoMenu()
-    return true
-end
-
-function K.famStoredCounts(inventory)
-    local list = type(inventory) == "table" and inventory.Families
-    if type(list) ~= "table" then return nil end
-    local counts = {}
-    for key, value in pairs(list) do
-        local name, amount
-        if type(value) == "string" then name, amount = value, 1
-        elseif type(value) == "table" then name, amount = value.Name or value.Family or value.name, 1
-        elseif type(key) == "string" and type(value) == "number" then name, amount = key, value end
-        if type(name) ~= "string" or not tonumber(amount) or amount ~= amount
-            or amount < 0 or amount == math.huge then return nil end
-        name = K.famProtected(name)
-        if name and tonumber(amount) and amount > 0 then counts[name] = (counts[name] or 0) + amount end
-    end
-    return counts
-end
 
 -- InvokeServer with a deadline that keeps EVERY return value. The shared
 -- invoke() hands back only the first, and a roll answers with five.
@@ -9146,8 +9020,6 @@ function K.famRarityOf(name)
 end
 
 function K.famWanted(name)
-    if K.famProtected(name) then return true end
-    if CFG.FamilyFillTargetStorage ~= false then return false end
     if name == nil or name == "" then return false end
     local n = tostring(name):lower()
     if type(CFG.FamilyWant) == "table" then
@@ -9174,29 +9046,13 @@ end
 -- Everything one decision needs, from a FRESH save: the roll count is the
 -- root Spins + Extra (what the ROLL button shows), the family is the
 -- avatar's, and the storage cap mirrors Customisation.Store.
-function K.famRead(authoritative)
-    local d
-    if authoritative then
-        -- Cached CoreTables can remain stale after rolls. This request returns
-        -- the server's current save; never silently fall back to an old cache.
-        -- Other independent reporters may request the save at the same time;
-        -- the server can return nil transiently. Retry without unlocking roll.
-        for attempt = 1, 3 do
-            if not alive() then return nil end
-            d = invoke(6, "Functions", "Settings", "Blur", "Off")
-            if type(d) == "table" and type(d.Slots) == "table" then break end
-            K.FAM.serverReadRetries = num(K.FAM.serverReadRetries) + 1
-            if attempt < 3 then task.wait(0.25 * attempt) end
-        end
-    else
-        d = getSave(true)
-    end
+function K.famRead()
+    local d = getSave(true)
     if type(d) ~= "table" or type(d.Slots) ~= "table" then return nil end
     local slot = d.Slots[d.Current_Slot or slotKey()] or d.Slots[slotKey()]
     if type(slot) ~= "table" then return nil end
     local av  = type(slot.Avatar) == "table" and slot.Avatar or {}
     local inv = type(slot.Inventory) == "table" and slot.Inventory or {}
-    if authoritative and (type(av.Family) ~= "string" or not K.famStoredCounts(inv)) then return nil end
     local cap = 1 + num(type(slot.Extra_Slots) == "table" and slot.Extra_Slots.Family or 0)
     pcall(function()
         local gp = plr:FindFirstChild("Gamepasses")
@@ -9213,8 +9069,6 @@ function K.famRead(authoritative)
         gems   = num(type(slot.Currency) == "table" and slot.Currency.Gems or 0),
         stored = type(inv.Families) == "table" and #inv.Families or 0,
         cap    = cap,
-        familyCounts = K.famStoredCounts(inv),
-        storedFamilies = inv.Families,
     }
 end
 
@@ -9259,7 +9113,6 @@ end
 -- cooldown costs nothing, so polling is free. Returns nil only when the
 -- server keeps refusing past FamilyRefuseSeconds -- i.e. not allowed HERE.
 function K.famRollOnce()
-    if K.famProtection() then return nil end
     local F = K.FAM
     local wake = F.lastRoll + F.cooldown - 0.15
     if os.clock() < wake then task.wait(wake - os.clock()) end
@@ -9277,184 +9130,16 @@ end
 
 function K.famStore()
     local r = K.invokeAll(5, "Family", "Store")
-    if r and r[1] == true and type(r[2]) == "string" then return r[2], r[3] and tostring(r[3]) or nil end
-    local reason = not r and "Store request timed out or failed"
-        or r[1] == nil and "Server returned nil for Store"
-        or type(r[1]) == "string" and r[1] or "Server refused Store"
-    return nil, nil, reason
-end
-
--- FAMILY COLLECTION FSM
-function K.famNamedStoredCount(st, wanted)
-    local count = 0
-    for key, value in pairs(st and st.storedFamilies or {}) do
-        local name, amount
-        if type(value) == "string" then name, amount = value, 1
-        elseif type(value) == "table" then name, amount = value.Name or value.Family or value.name, 1
-        elseif type(key) == "string" and type(value) == "number" then name, amount = key, value end
-        if name == wanted then count = count + num(amount) end
-    end
-    return count
-end
-
-function K.famPurgeOther(st, protectedName, where)
-    if CFG.FamilyDeleteNonTargets == false then return nil, "Storage full of mixed families; automatic cleanup disabled" end
-    local candidate
-    for key, value in pairs(st.storedFamilies or {}) do
-        local name, amount
-        if type(value) == "string" then name, amount = value, 1
-        elseif type(value) == "table" then name, amount = value.Name or value.Family or value.name, 1
-        elseif type(key) == "string" and type(value) == "number" then name, amount = key, value end
-        if type(name) == "string" and num(amount) > 0 and not K.famProtected(name) and K.famRarityOf(name) then
-            candidate = name
-            break
-        end
-    end
-    if not candidate then return nil, "No recognized non-target family can be deleted safely" end
-    -- Recheck the exact name immediately before the irreversible request.
-    if K.famProtected(candidate) then return nil, "Refusing to delete a target family" end
-    local before = K.famNamedStoredCount(st, candidate)
-    K.invokeAll(6, "Family", "Delete", candidate)
-    local after = K.famRead(true)
-    if not after or not after.familyCounts then return nil, "Cleanup result not verified" end
-    local targetsUnchanged = true
-    for name, count in pairs(st.familyCounts) do
-        if (after.familyCounts[name] or 0) ~= count then targetsUnchanged = false; break end
-    end
-    for name, count in pairs(after.familyCounts) do
-        if (st.familyCounts[name] or 0) ~= count then targetsUnchanged = false; break end
-    end
-    if not targetsUnchanged or after.family ~= st.family then
-        return nil, "Ownership changed during cleanup; reverify before proceeding"
-    end
-    if after.stored >= st.stored or K.famNamedStoredCount(after, candidate) >= before then
-        return nil, "Server did not confirm a free storage slot"
-    end
-    K.famNotify("slot_freed", protectedName, "Deleted non-target " .. candidate .. "; free slot verified", after, where)
-    return after
-end
-
-function K.famStopFull(st, name, where)
-    if not name then
-        for target, count in pairs(st.familyCounts or {}) do
-            if count > 0 then name = target; break end
-        end
-    end
-    K.famLatch(name, "storage_full", "Storage is full of target families", { retryAt = 0 })
-    K.FAM.hold = "protected_full"
-    K.famNotify("storage_full", name, "All storage slots contain target families; waiting for collection", st, where)
-    return true, st
-end
-
-function K.famAfterStored(name, st, where)
-    K.famLatch(name, "stored", "Server save confirms the stored copy")
-    K.famNotify("stored", name, "Verified storage; continuing rolls while target storage has space", st, where)
-    if K.famTargetFull(st) then return K.famStopFull(st, name, where) end
-    local nextTarget = K.famProtected(st.family)
-    K.famRelease()
-    if nextTarget then
-        -- Store may assign another target as the new current family. Secure it
-        -- before any subsequent Roll, rather than overwriting it.
-        K.famLatch(nextTarget, "holding", "New equipped target must also be stored", {
-            storedBefore = st.familyCounts[nextTarget] or 0, retryAt = 0,
-        })
-        K.FAM.hold = "protected"
-    end
-    return false, st
-end
-
-function K.famSecureImpl(st, n, where, justRolled)
-    if not st or type(st.familyCounts) ~= "table" then
-        local old = K.famProtection()
-        if old then return K.famRetry(old.family, "Fresh family ownership unavailable", st, where, old.storedBefore) end
-        return true, st
-    end
-    local checkpoint = K.famProtection()
-    local current = K.famProtected(st.family)
-    if K.famTargetFull(st) then return K.famStopFull(st, current or (checkpoint and checkpoint.family), where) end
-
-    if not current then
-        if not checkpoint then return false, st end
-        if checkpoint.status == "storage_full" then
-            K.famNotify("space_available", checkpoint.family, "Collection freed storage; resuming rolls", st, where)
-            K.famRelease()
-            return false, st
-        end
-        local count = st.familyCounts[checkpoint.family] or 0
-        local verified = (checkpoint.status == "stored" and count > 0)
-            or (checkpoint.storedBefore ~= nil and count > checkpoint.storedBefore)
-        if verified then return K.famAfterStored(checkpoint.family, st, where) end
-        return K.famRetry(checkpoint.family, "Previous Store remains unconfirmed; do not roll", st, where, checkpoint.storedBefore)
-    end
-
-    local baseline = st.familyCounts[current] or 0
-    if checkpoint and checkpoint.family == current and not justRolled and checkpoint.storedBefore ~= nil then
-        baseline = checkpoint.storedBefore
-    end
-    K.famLatch(current, "holding", "Securing the equipped target before another roll", { storedBefore = baseline, retryAt = 0 })
-    K.FAM.hold = "protected"
-    if justRolled or not checkpoint then
-        K.famNotify(justRolled and "rolled" or "found", current, "Roll temporarily locked until storage is verified", st, where)
-    end
-    local fresh = K.famRead(true)
-    if not fresh or not fresh.familyCounts then
-        return K.famRetry(current, "Cannot read a fresh save; keep equipped target and retry after rejoin", st, where, baseline)
-    end
-    if K.famProtected(fresh.family) ~= current then
-        if (fresh.familyCounts[current] or 0) > baseline then return K.famAfterStored(current, fresh, where) end
-        return K.famRetry(current, "Current target changed without verified storage increase", fresh, where, baseline)
-    end
-    if K.famTargetFull(fresh) then return K.famStopFull(fresh, current, where) end
-
-    if game.PlaceId ~= PLACE.TITLE then
-        K.famLatch(current, "store_needs_menu", "Store requires the roll menu", { storedBefore = baseline, retryAt = 0 })
-        K.famNotify("store_needs_menu", current, "Moving to the roll menu with rolling locked", fresh, where)
-        K.famRequestMenu()
-        return true, fresh
-    end
-    if fresh.stored >= fresh.cap then
-        local cleaned, reason = K.famPurgeOther(fresh, current, where)
-        if not cleaned then return K.famRetry(current, reason, fresh, where, baseline) end
-        fresh = cleaned
-    end
-    local before = fresh.familyCounts[current] or 0
-    K.famLatch(current, "holding", "Store in flight; rolling locked", { storedBefore = before })
-    local storedName, _, storeError = K.famStore()
-    local after = K.famRead(true)
-    if after and after.familyCounts and (after.familyCounts[current] or 0) > before then
-        -- This also recovers a successful Store whose reply was lost. The
-        -- absolute server-save increase prevents duplicate Store attempts.
-        return K.famAfterStored(current, after, where)
-    end
-    return K.famRetry(current, storeError or "Storage increase not verified; rejoin before retrying", after or fresh, where, before)
-end
-
-function K.famSecure(st, n, where, justRolled)
-    if K.FAM.securing then return true, st end
-    K.FAM.securing = true
-    local ok, blocked, after = pcall(K.famSecureImpl, st, n, where, justRolled)
-    K.FAM.securing = false
-    if ok then return blocked, after end
-    local checkpoint = K.famProtection()
-    local name = K.famProtected(st and st.family) or (checkpoint and checkpoint.family)
-    if name then return K.famRetry(name, tostring(blocked), st, where, checkpoint and checkpoint.storedBefore) end
-    K.FAM.hold = "protected_retry"
-    return true, st
+    if r and r[1] == true then return tostring(r[2]), r[3] and tostring(r[3]) or nil end
+    return nil
 end
 
 -- Buy and roll until a wanted family is equipped, the spins and gems run out,
 -- or FamilyMaxRolls. Returns why it stopped:
 --   "wanted" | "nogems" | "nospins" | "cap" | "refused" | "nosave" | "off"
-function K.familySessionImpl(where)
-    local st = K.famRead(true)
-    if not st then
-        local checkpoint = K.famProtection()
-        if checkpoint then K.famRetry(checkpoint.family, "Fresh save unavailable", nil, where, checkpoint.storedBefore); return "recovering" end
-        return "nosave"
-    end
-    local blocked, updated = K.famSecure(st, 0, where, false)
-    st = updated or st
-    if blocked then return K.famProtection() and K.famProtection().status == "storage_full" and "full" or "recovering" end
+function K.familySession(where)
+    local st = K.famRead()
+    if not st then return "nosave" end
     -- A full session is up to ~27 minutes standing still (500 rolls x 3.3s),
     -- past Roblox's 20-minute idle kick. The farm never needed this because it
     -- teleports every mission.
@@ -9484,12 +9169,10 @@ function K.familySessionImpl(where)
             nospins = "Dừng: hết Spin", cap = "Dừng: đạt giới hạn lượt quay",
             refused = "Dừng: server từ chối lượt quay", nosave = "Dừng: không đọc được save",
             off = "Đã tắt Family Roll",
-            full = "Kho đã đầy Fritz/Helos — chờ gom",
-            recovering = "Tạm khóa roll — sẽ thử lưu lại sau rejoin",
         }
-        K.famUIRefresh(K.famRead(true) or st, finishLabels[why] or ("Đã dừng: " .. tostring(why)), rolled, ctx.spent)
+        K.famUIRefresh(K.famRead() or st, finishLabels[why] or ("Đã dừng: " .. tostring(why)), rolled, ctx.spent)
         if ctx.rolled > 0 or ctx.bought > 0 then
-            st = K.famRead(true) or st
+            st = K.famRead() or st
             K.whRollSummary(ctx, st, why)
             K.whFlush(6)
         end
@@ -9498,12 +9181,6 @@ function K.familySessionImpl(where)
 
     while alive() do
         -- 1. A wanted family is on: keep it (or bank it and roll on).
-        local secured, nextState = K.famSecure(st, rolled, where, false)
-        st = nextState or st
-        if secured then return finish(K.famProtection() and K.famProtection().status == "storage_full" and "full" or "recovering") end
-        -- Store can equip another target. Process its protection checkpoint on
-        -- the next pass instead of entering the legacy unverified Store path.
-        if K.famProtected(st.family) then continue end
         if K.famWanted(st.family) then
             if CFG.FamilyStoreWanted and st.stored < st.cap then
                 local storedName, newFam = K.famStore()
@@ -9543,7 +9220,7 @@ function K.familySessionImpl(where)
             K.FAMUI.sessionSpent = ctx.spent
             K.famUIRefresh(st, ("Đã mua %s Spin · đang cập nhật save"):format(comma(num(nSpins))), rolled, ctx.spent)
             task.wait(0.5)
-            st = K.famRead(true) or st
+            st = K.famRead() or st
             K.famUIRefresh(st, "Đang quay Family", rolled, ctx.spent)
             if st.spins <= 0 then return finish("nogems") end
             continue
@@ -9553,19 +9230,13 @@ function K.familySessionImpl(where)
         -- 3. Roll.
         setAction("Family roll — %s · %s spins left", tostring(st.family), comma(st.spins))
         local r = K.famRollOnce()
-        if not r then return finish(K.famProtection() and "recovering" or "refused") end
+        if not r then return finish("refused") end
         rolled    = rolled + 1
         ctx.rolled = rolled
         st.spins  = r.spins
         st.family = r.family
         st.pity   = r.pity
         STATE.family, STATE.spins = r.family, r.spins
-        if K.famProtected(r.family) then
-            local secured, afterStore = K.famSecure(st, rolled, where, true)
-            st = afterStore or st
-            if secured then return finish(K.famProtection() and K.famProtection().status == "storage_full" and "full" or "recovering") end
-            STATE.family, STATE.spins = st.family, st.spins
-        end
         local rar  = K.famRarityOf(r.family)
         K.famUIAddHistory(r.family, rar or "?", r.spins, r.pity)
         K.FAMUI.sessionRolls = rolled
@@ -9584,22 +9255,9 @@ function K.familySessionImpl(where)
             end
         end
         -- Gems only matter again once the spins run out; re-read then.
-        if st.spins <= 0 then st = K.famRead(true) or st end
+        if st.spins <= 0 then st = K.famRead() or st end
     end
     return finish("off")
-end
-
-function K.familySession(where)
-    if K.FAM.sessionRunning then return "busy" end
-    K.FAM.sessionRunning = true
-    local ok, why = pcall(K.familySessionImpl, where)
-    K.FAM.sessionRunning = false
-    if ok then return why end
-    log("FAMILY", "session error: " .. tostring(why))
-    local checkpoint = K.famProtection()
-    if checkpoint then K.famRetry(checkpoint.family, tostring(why), nil, where, checkpoint.storedBefore); return "recovering" end
-    K.FAM.visitDone = false
-    return "nosave"
 end
 
 function K.famWhere()
@@ -9646,11 +9304,6 @@ end
 -- The lobby side. Runs once per lobby visit; returns true when the lobby
 -- should hold here instead of staging a mission.
 function K.famLobby()
-    if K.FAM.sessionRunning then return true end
-    if K.famProtection() then
-        K.FAM.hold = K.famProtection().status == "storage_full" and "protected_full" or "protected_retry"
-        return true
-    end
     if K.FAM.hold then return true end
     if K.FAM.visitDone or not K.famPhase() then return false end
     K.FAM.visitDone = true
@@ -9667,8 +9320,7 @@ function K.famLobby()
     local why
     if where == "menu" then
         -- Rolls are known not to work here: buy here, roll there.
-        local st = K.famRead(true)
-        if st and K.famSecure(st, 0, "lobby", false) then return true end
+        local st = K.famRead()
         if not st or K.famWanted(st.family) then
             why = st and "wanted" or "nosave"
         else
@@ -9711,22 +9363,6 @@ end
 
 -- The title-screen side: roll here when the lobby asked for it.
 function K.famTitle()
-    if K.FAM.sessionRunning then return end
-    local checkpoint = K.famProtection()
-    if checkpoint then
-        K.FAM.hold = checkpoint.status == "storage_full" and "protected_full" or "protected_retry"
-        -- The recovery worker checks for collected copies on its interval.
-        -- Avoid opening another session on every title-screen frame.
-        if checkpoint.status == "storage_full" then return end
-        if checkpoint.retryAt and checkpoint.retryAt > os.time() then return end
-        if checkpoint.status == "store_retry" and checkpoint.failedJob == game.JobId then
-            K.famRequestMenu()
-            return
-        end
-        if K.FAM.protectedMenuRequested then return end
-        K.familySession("menu")
-        return
-    end
     if not K.famMenuPending() then return end
     K.famMenuClear()
     refreshState(true)
@@ -9735,59 +9371,11 @@ function K.famTitle()
     log("FAMILY", "title-screen session ended: " .. tostring(why))
     if why == "refused" then
         K.famSetWhere("none:" .. tostring(os.time()))
-        log("FAMILY", "rolls refused on menu; retrying later")
+        log("FAMILY", "rolls are refused on the title screen too — not trying again for 6h")
     end
 end
 
-function K.famRecoveryTick()
-    if K.FAM.sessionRunning or K.FAM.securing then return end
-    local checkpoint = K.famProtection()
-    if not checkpoint then return end
-    local now = os.time()
-    if now < num(K.FAM.nextRecoveryAt) then return end
-    if now < num(checkpoint.retryAt) then K.FAM.nextRecoveryAt = checkpoint.retryAt; return end
-    K.FAM.nextRecoveryAt = now + math.max(5, num(CFG.FamilyStoreRetryDelay, 30))
-
-    if checkpoint.status == "store_needs_menu" then
-        if game.PlaceId == PLACE.TITLE and not K.FAM.protectedMenuRequested then
-            K.familySession("menu")
-        else
-            K.famRequestMenu()
-        end
-        return
-    end
-    local fresh = K.famRead(true)
-    if K.FAM.sessionRunning or K.FAM.securing then return end
-    if checkpoint.status == "store_retry" and (not fresh or K.famProtected(fresh.family)) then
-        if game.PlaceId == PLACE.TITLE and checkpoint.failedJob ~= game.JobId then
-            K.familySession("menu")
-        elseif not K.famRequestMenu() and game.PlaceId == PLACE.TITLE then
-            -- Without file APIs, retry in-place while the RAM lock is intact.
-            K.familySession("menu")
-        end
-        return
-    end
-    if not fresh then return end
-    local blocked = K.famSecure(fresh, 0, game.PlaceId == PLACE.TITLE and "menu" or "lobby", false)
-    if not blocked then
-        if game.PlaceId == PLACE.TITLE then
-            K.familySession("menu")
-        else
-            K.FAM.hold, K.FAM.visitDone = nil, false
-        end
-    end
-end
-
-task.spawn(function()
-    task.wait(2)
-    while alive() do
-        local ok, err = pcall(K.famRecoveryTick)
-        if not ok then log("FAMILY", "recovery tick: " .. tostring(err)) end
-        task.wait(1)
-    end
-end)
-
--- FAMILY HOUSEKEEPING
+-- ═══════════════════════════════════════════════════════════════════════════
 -- 36 · QUESTS
 --     v9 fired ~90 accept calls every five minutes from a hardcoded tag list,
 --     regardless of whether those quests existed or were already claimed. v10
@@ -9847,120 +9435,6 @@ local function runQuests()
 end
 
 -- ═══════════════════════════════════════════════════════════════════════════
--- Achievement claims follow the game's Achievements UI: Claim(title index),
--- then Category(item ID). Never use State, which equips/unequips a title.
-K.ACHIEVEMENTS = { busy = false }
-
-function K.achievementSlot(data)
-    if type(data) ~= "table" or type(data.Slots) ~= "table" then return nil end
-    return data.Slots[data.Current_Slot or slotKey()]
-end
-
-function K.achievementPlan(slot, definitions)
-    local plan = { titles = {}, categories = {} }
-    if type(slot) ~= "table" or type(slot.Titles) ~= "table" or type(definitions) ~= "table" then return plan end
-    local seen = {}
-    for _, category in pairs(definitions) do
-        if type(category) == "table" and type(category.Titles) == "table" then
-            local total, owned = 0, 0
-            for key, def in pairs(category.Titles) do
-                local id = tonumber(key)
-                local progress = slot.Titles[key] or (id and slot.Titles[id]) or slot.Titles[tostring(key)]
-                if type(def) == "table" then
-                    local requirement = type(def.Requirement) == "string" and 1 or tonumber(def.Requirement)
-                    local current = type(progress) == "table" and tonumber(progress.Current)
-                    if id and id > 0 and id == math.floor(id) and not seen[id]
-                        and type(progress) == "table" and progress.Owned ~= true
-                        and requirement and requirement >= 0 and current and current == current
-                        and current < math.huge and current >= requirement then
-                        seen[id] = true
-                        plan.titles[#plan.titles + 1] = { id = id, name = tostring(def.Title or id) }
-                    end
-                    -- Same category-completion exclusions as the game UI.
-                    if (def.Rarity ~= "Mythic" and def.Rarity ~= "Exclusive") or def.Title == "Apex" then
-                        total = total + 1
-                        if type(progress) == "table" and progress.Owned == true then owned = owned + 1 end
-                    end
-                end
-            end
-            local item = category.Item
-            if total > 0 and total == owned and type(item) == "table" and item.ID ~= nil
-                and type(slot.Claimed) == "table" and not table.find(slot.Claimed, item.ID) then
-                plan.categories[#plan.categories + 1] = { id = item.ID, name = tostring(category.Tag or item.ID) }
-            end
-        end
-    end
-    table.sort(plan.titles, function(a, b) return a.id < b.id end)
-    table.sort(plan.categories, function(a, b) return tostring(a.id) < tostring(b.id) end)
-    return plan
-end
-
-function K.claimAchievementsOnce()
-    if CFG.AutoClaimAchievements == false or K.ACHIEVEMENTS.busy then return 0 end
-    K.ACHIEVEMENTS.busy = true
-    local status = { at = os.time(), claimedTitles = 0, claimedCategories = 0, failures = 0, attempts = 0 }
-    _G.VCP_AchievementsStatus = status
-    local total = 0
-    local ok, err = pcall(function()
-        local definitions = MOD.Titles
-        if type(definitions) ~= "table" then error("Titles definitions unavailable") end
-        local data = invoke(6, "Functions", "Settings", "Blur", "Off")
-        local slot = K.achievementSlot(data)
-        if type(slot) ~= "table" then error("fresh server save unavailable") end
-        local limit = math.clamp(math.floor(num(CFG.AchievementClaimsPerPass, 20)), 1, 100)
-        local plan = K.achievementPlan(slot, definitions)
-        for _, item in ipairs(plan.titles) do
-            if not alive() or status.attempts >= limit then break end
-            status.attempts = status.attempts + 1
-            local r = K.invokeAll(6, "S_Achievements", "Claim", item.id)
-            local nextSlot = r and K.achievementSlot(r[1])
-            local progress = nextSlot and type(nextSlot.Titles) == "table"
-                and (nextSlot.Titles[item.id] or nextSlot.Titles[tostring(item.id)])
-            if type(progress) == "table" and progress.Owned == true then
-                data, slot = r[1], nextSlot
-                total, status.claimedTitles = total + 1, status.claimedTitles + 1
-                status.lastClaimed = item.name
-            else
-                status.failures = status.failures + 1
-                status.lastError = "Title claim not verified: " .. item.name
-            end
-            task.wait(0.2)
-        end
-        -- Recompute after title claims so newly completed categories qualify.
-        plan = K.achievementPlan(slot, definitions)
-        for _, item in ipairs(plan.categories) do
-            if not alive() or status.attempts >= limit then break end
-            status.attempts = status.attempts + 1
-            local r = K.invokeAll(6, "S_Achievements", "Category", item.id)
-            local nextSlot = r and K.achievementSlot(r[1])
-            if nextSlot and type(nextSlot.Claimed) == "table" and table.find(nextSlot.Claimed, item.id) then
-                data, slot = r[1], nextSlot
-                total, status.claimedCategories = total + 1, status.claimedCategories + 1
-                status.lastClaimed = item.name
-            else
-                status.failures = status.failures + 1
-                status.lastError = "Category claim not verified: " .. item.name
-            end
-            task.wait(0.2)
-        end
-        if total > 0 then
-            SAVE.data, SAVE.at, SAVE.source = data, os.clock(), "achievements"
-            log("ACHIEVEMENTS", ("claimed %d titles and %d categories"):format(status.claimedTitles, status.claimedCategories))
-        end
-    end)
-    K.ACHIEVEMENTS.busy = false
-    status.done, status.error = ok, not ok and tostring(err) or nil
-    return total
-end
-
-task.spawn(function()
-    task.wait(8)
-    while alive() do
-        if game.PlaceId ~= PLACE.TITLE and not isMissionPlace() then K.claimAchievementsOnce() end
-        task.wait(math.max(20, num(CFG.AchievementClaimInterval, 60)))
-    end
-end)
-
 -- 37 · BOOSTS
 --     Consume from inventory first, buy with gems only when configured to.
 -- ═══════════════════════════════════════════════════════════════════════════
@@ -11084,11 +10558,6 @@ local function runTitle()
     pcall(K.famTitle)
 
     while alive() and game.PlaceId == PLACE.TITLE do
-        if K.famProtection() or K.FAM.sessionRunning then
-            if K.famProtection() then setAction("Protected family — storage/recovery in progress") end
-            task.wait(1)
-            continue
-        end
         pcall(function()
             local gui = plr:FindFirstChild("PlayerGui")
             if gui then
@@ -11567,11 +11036,6 @@ function K.whPump()
             if ok and type(res) == "table" then
                 code = tonumber(res.StatusCode or res.Status_Code or res.status_code) or 0
             end
-            _G.VCP_WebhookStatus = {
-                httpCode = code, at = os.time(), pending = #W.q,
-                delivered = code >= 200 and code < 300,
-                title = item.p.embeds and item.p.embeds[1] and item.p.embeds[1].title,
-            }
 
             if code >= 200 and code < 300 then
                 W.s429   = 0
@@ -11916,43 +11380,6 @@ function K.whCard(title, rows, color, footer, description)
             } },
         })
     end)
-end
-
--- Protection notices bypass normal rarity/stored-only filters. They still
--- require a configured webhook URL; failures are visible in VCP_WebhookStatus.
-function K.whProtected(kind, family, reason, st, where)
-    if CFG.WebhookFamilyProtection == false or not K.whEnabled() then return end
-    local labels = {
-        rolled = "Roll trúng — đã khóa roll", found = "Đang sở hữu — đã khóa roll",
-        stored = "Lưu kho thành công — đã xác minh",
-        store_failed = "Lưu kho thất bại — giữ family, dừng roll",
-        store_unconfirmed = "Chưa xác minh lưu kho — cần kiểm tra thủ công",
-        store_needs_menu = "Lobby không lưu được — chuyển menu, vẫn khóa roll",
-        store_retry = "Lưu chưa thành công — sẽ rejoin và thử lại",
-        storage_full = "Kho đầy Fritz/Helos — dừng roll để gom",
-        slot_freed = "Đã xóa family ngoài mục tiêu để lấy chỗ",
-        space_available = "Kho đã có chỗ — tiếp tục roll",
-        kept = "Giữ family hiện tại — dừng roll",
-    }
-    K.whPush({
-        username = tostring(CFG.WebhookUsername or "VC+ AOTR"),
-        embeds = { {
-            title = tostring(family) .. " · " .. tostring(labels[kind] or kind),
-            description = tostring(reason),
-            color = kind == "stored" and 0x22C55E or kind == "rolled" and 0x38BDF8 or 0xF59E0B,
-            fields = {
-                { name = "Tài khoản", value = tostring(plr.Name), inline = true },
-                { name = "Roblox User ID", value = tostring(plr.UserId), inline = true },
-                { name = "Spins", value = tostring(st and st.spins or "?"), inline = true },
-                { name = "Xử lý", value = kind == "stored" and "Đã xác minh lưu kho. Tiếp tục roll nếu còn chỗ."
-                    or kind == "storage_full" and "Kho đầy family mục tiêu. Dừng để gom."
-                    or kind == "space_available" and "Đã có chỗ trống. Tiếp tục roll."
-                    or "Tạm khóa roll để bảo vệ family và thử lưu lại.", inline = false },
-            },
-            footer = { text = tostring(where or "?") },
-            timestamp = os.date("!%Y-%m-%dT%H:%M:%SZ"),
-        } },
-    })
 end
 
 -- One rolled family. kind: "roll" (WebhookRollRarity or rarer) | "wanted" | "stored"
@@ -12925,7 +12352,7 @@ do
         })
         while #H.history > 12 do table.remove(H.history) end
         H.total = H.total + 1
-        --K.famUIRefresh()
+        K.famUIRefresh()
     end
 
     function K.famUIRefresh(st, status, rolled, spent)
